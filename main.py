@@ -35,7 +35,7 @@ NOTIFICATION_INTERVAL = 300  # 5 menit dalam detik
 ALERT_COOLDOWN = 60  # 1 menit cooldown untuk notifikasi langsung
 CAMERA_URL = "http://192.168.1.12:81/stream"  # URL kamera ESP32-CAM
 GEMINI_API_KEY = "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"
-GEMINI_MODEL = "deepseek/deepseek-chat-v3-0324:free"
+GEMINI_MODEL = "google/gemini-flash-1.5"
 
 # --- STYLE ---
 st.markdown("""
