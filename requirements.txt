@@ -1,0 +1,10 @@
+streamlit
+requests
+pandas
+scikit-learn
+streamlit-autorefresh
+opencv-python
+torch
+Pillow
+numpy
+python-telegram-bot==20.3
