@@ -28,7 +28,7 @@ os.environ['TORCH_HOME'] = '/tmp/torch_hub'
 # --- CONFIG ---
 UBIDOTS_TOKEN = "BBUS-4dkNId6LDOVysK48pdwW8cUGBfAQTK"
 DEVICE_LABEL = "hsc345"
-VARIABLES = ["mq2", "humidity", "temperature", "lux", "mic"]  # Tambah sound
+VARIABLES = ["mq2", "humidity", "temperature", "lux", "mic"]  # Ubah sound jadi mic
 TELEGRAM_BOT_TOKEN = "7941979379:AAEWGtlb87RYkvht8GzL8Ber29uosKo3e4s"
 TELEGRAM_CHAT_ID = "5721363432"
 NOTIFICATION_INTERVAL = 300  # 5 menit dalam detik
@@ -181,7 +181,7 @@ def fetch_latest_sensor_data():
     lux_value = data_values.get("lux")
     temperature_value = data_values.get("temperature")
     humidity_value = data_values.get("humidity")
-    sound_value = data_values.get("sound")
+    mic_value = data_values.get("mic")
     
     statuses["mq2"] = predict_smoke_status(mq2_value) if mq2_value is not None else "Data asap tidak tersedia"
     statuses["lux"] = evaluate_lux_condition(lux_value, mq2_value) if lux_value is not None else "Data cahaya tidak tersedia"
@@ -190,7 +190,7 @@ def fetch_latest_sensor_data():
         f"Kelembapan {humidity_value}%: {'tinggi' if humidity_value > 70 else 'normal' if humidity_value >= 30 else 'rendah'}"
         if humidity_value is not None else "Data kelembapan tidak tersedia"
     )
-    statuses["sound"] = evaluate_sound_condition(sound_value) if sound_value is not None else "Data suara tidak tersedia"
+    statuses["mic"] = evaluate_mic_condition(mic_value) if mic_value is not None else "Data amplitudo tidak tersedia"
     
     return {
         "values": data_values,
@@ -255,17 +255,17 @@ def evaluate_temperature_condition(temp_value):
     else:
         return "Suhu terlalu dingin, bisa tidak nyaman."
 
-def evaluate_sound_condition(sound_value):
-    if sound_value is None:
-        return "Data suara tidak tersedia."
-    if sound_value >= 80:
-        return f"Suara {sound_value} dB: Tinggi, kemungkinan aktivitas mencurigakan."
-    elif sound_value >= 50:
-        return f"Suara {sound_value} dB: Sedang, mungkin ada aktivitas normal."
+def evaluate_mic_condition(mic_value):
+    if mic_value is None:
+        return "Data amplitudo tidak tersedia."
+    if mic_value >= 600:
+        return f"Amplitudo {mic_value}: Tinggi, kemungkinan aktivitas mencurigakan."
+    elif mic_value >= 200:
+        return f"Amplitudo {mic_value}: Sedang, mungkin ada aktivitas normal."
     else:
-        return f"Suara {sound_value} dB: Rendah, ruangan relatif tenang."
+        return f"Amplitudo {mic_value}: Rendah, ruangan relatif tenang."
 
-def generate_narrative_report(mq2_status, mq2_value, lux_status, lux_value, temp_status, temp_value, humidity_status, humidity_value, sound_status, sound_value):
+def generate_narrative_report(mq2_status, mq2_value, lux_status, lux_value, temp_status, temp_value, humidity_status, humidity_value, mic_status, mic_value):
     intro_templates = [
         "Saat ini, kondisi ruangan terpantau sebagai berikut.",
         "Berikut laporan terbaru dari sistem pengawasan ruangan.",
@@ -327,18 +327,18 @@ def generate_narrative_report(mq2_status, mq2_value, lux_status, lux_value, temp
             f"Ruangan agak kering dengan kelembapan {humidity_value}%."
         ]
     }
-    sound_templates = {
+    mic_templates = {
         "tinggi": [
-            f"Tingkat suara tinggi di {sound_value} dB. Mungkin ada aktivitas mencurigakan.",
-            f"Dengan {sound_value} dB, ruangan cukup bising. Perlu diperiksa."
+            f"Amplitudo tinggi di {mic_value}. Mungkin ada aktivitas mencurigakan.",
+            f"D perroengan {mic_value}, ruangan menunjukkan aktivitas suara yang signifikan."
         ],
         "sedang": [
-            f"Tingkat suara sedang di {sound_value} dB. Aktivitas normal kemungkinan terjadi.",
-            f"Suara di {sound_value} dB menunjukkan kondisi cukup aktif."
+            f"Amplitudo sedang di {mic_value}. Aktivitas normal kemungkinan terjadi.",
+            f"Level amplitudo {mic_value} menunjukkan kondisi cukup aktif."
         ],
         "rendah": [
-            f"Tingkat suara rendah di {sound_value} dB. Ruangan relatif tenang.",
-            f"Dengan {sound_value} dB, suasana ruangan sangat damai."
+            f"Amplitudo rendah di {mic_value}. Ruangan relatif tenang.",
+            f"Dengan {mic_value}, suasana ruangan sangat damai."
         ]
     }
 
@@ -350,8 +350,8 @@ def generate_narrative_report(mq2_status, mq2_value, lux_status, lux_value, temp
     temp = random.choice(temp_templates.get(temp_key, ["Data suhu tidak tersedia."]))
     humidity_key = "tinggi" if "tinggi" in humidity_status.lower() else "rendah" if "rendah" in humidity_status.lower() else "normal"
     humidity = random.choice(humidity_templates.get(humidity_key, ["Data kelembapan tidak tersedia."]))
-    sound_key = "tinggi" if "tinggi" in sound_status.lower() else "sedang" if "sedang" in sound_status.lower() else "rendah"
-    sound = random.choice(sound_templates.get(sound_key, ["Data suara tidak tersedia."]))
+    mic_key = "tinggi" if "tinggi" in mic_status.lower() else "sedang" if "sedang" in mic_status.lower() else "rendah"
+    mic = random.choice(mic_templates.get(mic_key, ["Data amplitudo tidak tersedia."]))
 
     narrative = (
         f"📊 *Laporan Status Ruangan*\n"
@@ -360,13 +360,13 @@ def generate_narrative_report(mq2_status, mq2_value, lux_status, lux_value, temp
         f"- 💡 {light}\n"
         f"- 🌡️ {temp}\n"
         f"- 💧 {humidity}\n"
-        f"- 🎙️ {sound}\n"
+        f"- 🎙️ {mic}\n"
         f"🕒 *Waktu*: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
     )
     return narrative
 
-def predict_smoking_risk_rule_based(mq2_value, lux_value, sound_value):
-    if mq2_value is None or lux_value is None or sound_value is None:
+def predict_smoking_risk_rule_based(mq2_value, lux_value, mic_value):
+    if mq2_value is None or lux_value is None or mic_value is None:
         return "Data tidak cukup untuk prediksi risiko merokok."
     
     risk_score = 0
@@ -390,14 +390,14 @@ def predict_smoking_risk_rule_based(mq2_value, lux_value, sound_value):
     else:
         risk_messages.append("Ruangan terang (lux > 100), mengurangi kemungkinan merokok tersembunyi.")
     
-    if sound_value >= 80:
+    if mic_value >= 600:
         risk_score += 15
-        risk_messages.append("Tingkat suara tinggi (≥ 80 dB), bisa menandakan aktivitas mencurigakan.")
-    elif sound_value >= 50:
+        risk_messages.append("Amplitudo tinggi (≥ 600), bisa menandakan aktivitas mencurigakan.")
+    elif mic_value >= 200:
         risk_score += 5
-        risk_messages.append("Tingkat suara sedang (50-80 dB), mungkin aktivitas normal.")
+        risk_messages.append("Amplitudo sedang (200-600), mungkin aktivitas normal.")
     else:
-        risk_messages.append("Tingkat suara rendah (< 50 dB), ruangan tenang.")
+        risk_messages.append("Amplitudo rendah (< 200), ruangan tenang.")
 
     if risk_score >= 60:
         risk_level = "Tinggi"
@@ -417,22 +417,22 @@ def predict_smoking_risk_rule_based(mq2_value, lux_value, sound_value):
     )
     return report
 
-def get_room_condition_summary(mq2_value, lux_value, temperature_value, humidity_value, sound_value):
+def get_room_condition_summary(mq2_value, lux_value, temperature_value, humidity_value, mic_value):
     mq2_status = predict_smoke_status(mq2_value)
     lux_status = evaluate_lux_condition(lux_value, mq2_value)
     temp_status = evaluate_temperature_condition(temperature_value)
     humidity_status = (f"Kelembapan {humidity_value}%: {'tinggi' if humidity_value > 70 else 'normal' if humidity_value >= 30 else 'rendah'}"
                       if humidity_value is not None else "Data kelembapan tidak tersedia.")
-    sound_status = evaluate_sound_condition(sound_value)
+    mic_status = evaluate_mic_condition(mic_value)
 
-    if "Bahaya" in mq2_status or "berbahaya" in temp_status.lower() or "tinggi" in sound_status.lower():
+    if "Bahaya" in mq2_status or "berbahaya" in temp_status.lower() or "tinggi" in mic_status.lower():
         overall_status = "Bahaya"
         color = "red"
-        suggestion = "Segera ambil tindakan: periksa sumber asap, suhu, atau suara mencurigakan."
-    elif "Mencurigakan" in mq2_status or "mencurigakan" in lux_status.lower() or "panas" in temp_status.lower() or "tinggi" in humidity_status.lower() or "sedang" in sound_status.lower():
+        suggestion = "Segera ambil tindakan: periksa sumber asap, suhu, atau amplitudo mencurigakan."
+    elif "Mencurigakan" in mq2_status or "mencurigakan" in lux_status.lower() or "panas" in temp_status.lower() or "tinggi" in humidity_status.lower() or "sedang" in mic_status.lower():
         overall_status = "Waspada"
         color = "orange"
-        suggestion = "Pantau ruangan lebih sering dan pertimbangkan ventilasi, penyesuaian cahaya, atau pemeriksaan suara."
+        suggestion = "Pantau ruangan lebih sering dan pertimbangkan ventilasi, penyesuaian cahaya, atau pemeriksaan amplitudo."
     else:
         overall_status = "Aman"
         color = "green"
@@ -447,7 +447,7 @@ def get_room_condition_summary(mq2_value, lux_value, temperature_value, humidity
             "Cahaya": lux_status,
             "Suhu": temp_status,
             "Kelembapan": humidity_status,
-            "Suara": sound_status
+            "Amplitudo": mic_status
         }
     }
 
@@ -475,14 +475,14 @@ def get_gemini_response(messages):
         logger.error(f"Exception saat menghubungi Gemini API: {str(e)}")
         return "Maaf, terjadi kesalahan saat menghubungi AI. Silakan coba lagi nanti."
 
-def generate_chatbot_context(mq2_value, lux_value, temperature_value, humidity_value, sound_value):
+def generate_chatbot_context(mq2_value, lux_value, temperature_value, humidity_value, mic_value):
     """Generate context for the chatbot based on sensor data"""
     mq2_status = predict_smoke_status(mq2_value)
     lux_status = evaluate_lux_condition(lux_value, mq2_value)
     temp_status = evaluate_temperature_condition(temperature_value)
     humidity_status = (f"Kelembapan {humidity_value}%: {'tinggi' if humidity_value > 70 else 'normal' if humidity_value >= 30 else 'rendah'}"
                       if humidity_value is not None else "Data kelembapan tidak tersedia.")
-    sound_status = evaluate_sound_condition(sound_value)
+    mic_status = evaluate_mic_condition(mic_value)
     
     return (
         "Anda adalah asisten AI untuk sistem deteksi merokok. Berikut data sensor terbaru:\n"
@@ -490,7 +490,7 @@ def generate_chatbot_context(mq2_value, lux_value, temperature_value, humidity_v
         f"- Sensor Cahaya: {lux_value} lux ({lux_status})\n"
         f"- Sensor Suhu: {temperature_value}°C ({temp_status})\n"
         f"- Sensor Kelembapan: {humidity_value}% ({humidity_status})\n"
-        f"- Sensor Suara: {sound_value} dB ({sound_status})\n\n"
+        f"- Sensor Amplitudo: {mic_value} ({mic_status})\n\n"
         "Anda bisa menjawab pertanyaan tentang kondisi ruangan, deteksi asap rokok, "
         "atau memberikan saran berdasarkan data sensor. Gunakan bahasa yang jelas dan informatif."
     )
@@ -577,7 +577,7 @@ def run_camera_detection(frame_placeholder, status_placeholder):
                         statuses["lux"], values.get("lux", "N/A"),
                         statuses["temperature"], values.get("temperature", "N/A"),
                         statuses["humidity"], values.get("humidity", "N/A"),
-                        statuses["sound"], values.get("sound", "N/A")
+                        statuses["mic"], values.get("mic", "N/A")
                     )
                     asyncio.run(send_telegram_photo(st.session_state.latest_frame, narrative))
 
@@ -607,7 +607,7 @@ def run_camera_detection(frame_placeholder, status_placeholder):
 # --- PERIODIC NOTIFICATION FUNCTION ---
 def send_periodic_notification():
     """
-    Mengirim notifikasi periodik ke Telegram setiap 5 menit dengan data suhu, kelembapan, asap, intensitas cahaya, dan suara.
+    Mengirim notifikasi periodik ke Telegram setiap 5 menit dengan data suhu, kelembapan, asap, intensitas cahaya, dan amplitudo.
     """
     current_time = time.time()
     if current_time - st.session_state.last_notification['last_sent'] < NOTIFICATION_INTERVAL:
@@ -627,8 +627,8 @@ def send_periodic_notification():
     st.session_state.last_notification['temperature']['value'] = values.get("temperature")
     st.session_state.last_notification['humidity']['status'] = statuses["humidity"]
     st.session_state.last_notification['humidity']['value'] = values.get("humidity")
-    st.session_state.last_notification['sound']['status'] = statuses["sound"]
-    st.session_state.last_notification['sound']['value'] = values.get("sound")
+    st.session_state.last_notification['mic']['status'] = statuses["mic"]
+    st.session_state.last_notification['mic']['value'] = values.get("mic")
     
     caption = (
         f"📊 *Laporan Status Ruangan* ({datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')})\n"
@@ -636,7 +636,7 @@ def send_periodic_notification():
         f"💡 *Cahaya*: {statuses['lux']} (Nilai: {values.get('lux', 'N/A')} lux)\n"
         f"🌡️ *Suhu*: {statuses['temperature']} (Nilai: {values.get('temperature', 'N/A')}°C)\n"
         f"💧 *Kelembapan*: {statuses['humidity']} (Nilai: {values.get('humidity', 'N/A')}%)\n"
-        f"🎙️ *Suara*: {statuses['sound']} (Nilai: {values.get('sound', 'N/A')} dB)\n"
+        f"🎙️ *Amplitudo*: {statuses['mic']} (Nilai: {values.get('mic', 'N/A')})\n"
     )
     
     if st.session_state.latest_frame is not None:
@@ -661,7 +661,7 @@ with tab1:
     lux_value_latest = None
     temperature_value_latest = None
     humidity_value_latest = None
-    sound_value_latest = None
+    mic_value_latest = None
 
     auto_refresh_iot = st.checkbox("Aktifkan Auto-Refresh Data IoT", value=True, key="iot_refresh")
     if auto_refresh_iot:
@@ -673,7 +673,7 @@ with tab1:
             'lux': {'status': None, 'value': None},
             'temperature': {'status': None, 'value': None},
             'humidity': {'status': None, 'value': None},
-            'sound': {'status': None, 'value': None},
+            'mic': {'status': None, 'value': None},
             'last_sent': 0
         }
 
@@ -713,14 +713,14 @@ with tab1:
                 var_label = "INTENSITAS CAHAYA"
                 emoji = "💡"
                 lux_value_latest = value
-            elif var_name == "sound":
-                var_label = "SUARA"
+            elif var_name == "mic":
+                var_label = "AMPLITUDO"
                 emoji = "🎙️"
-                sound_value_latest = value
+                mic_value_latest = value
 
             st.markdown(
                 f'<div class="data-box"><span class="label">{emoji} {var_label}</span><span class="data-value">{value}</span></div>',
-                unsafe_allow_html=True
+                unsafe_ALLOW_html=True
             )
 
             st.line_chart(df[['timestamp', 'value']].set_index('timestamp'))
@@ -750,7 +750,7 @@ with tab1:
                         statuses["lux"], values.get("lux", "N/A"),
                         statuses["temperature"], values.get("temperature", "N/A"),
                         statuses["humidity"], values.get("humidity", "N/A"),
-                        statuses["sound"], values.get("sound", "N/A")
+                        statuses["mic"], values.get("mic", "N/A")
                     )
                     if st.session_state.latest_frame is not None:
                         asyncio.run(send_telegram_photo(st.session_state.latest_frame, narrative))
@@ -792,23 +792,23 @@ with tab1:
                 st.session_state.last_notification['humidity']['value'] = value
                 st.info(humidity_status)
 
-            if var_name == "sound":
-                sound_status = evaluate_sound_condition(value)
-                st.session_state.last_notification['sound']['status'] = sound_status
-                st.session_state.last_notification['sound']['value'] = value
-                if "tinggi" in sound_status.lower():
-                    st.warning(sound_status)
-                elif "sedang" in sound_status.lower():
-                    st.info(sound_status)
+            if var_name == "mic":
+                mic_status = evaluate_mic_condition(value)
+                st.session_state.last_notification['mic']['status'] = mic_status
+                st.session_state.last_notification['mic']['value'] = value
+                if "tinggi" in mic_status.lower():
+                    st.warning(mic_status)
+                elif "sedang" in mic_status.lower():
+                    st.info(mic_status)
                 else:
-                    st.success(sound_status)
+                    st.success(mic_status)
 
         else:
             st.error(f"Gagal mengambil data dari variabel: {var_name}")
 
-    if all(v is not None for v in [mq2_value_latest, lux_value_latest, temperature_value_latest, humidity_value_latest, sound_value_latest]):
+    if all(v is not None for v in [mq2_value_latest, lux_value_latest, temperature_value_latest, humidity_value_latest, mic_value_latest]):
         summary = get_room_condition_summary(
-            mq2_value_latest, lux_value_latest, temperature_value_latest, humidity_value_latest, sound_value_latest
+            mq2_value_latest, lux_value_latest, temperature_value_latest, humidity_value_latest, mic_value_latest
         )
         st.markdown(
             f"""
@@ -821,7 +821,7 @@ with tab1:
                     <li>Cahaya: {summary['details']['Cahaya']}</li>
                     <li>Suhu: {summary['details']['Suhu']}</li>
                     <li>Kelembapan: {summary['details']['Kelembapan']}</li>
-                    <li>Suara: {summary['details']['Suara']}</li>
+                    <li>Amplitudo: {summary['details']['Amplitudo']}</li>
                 </ul>
             </div>
             """,
@@ -834,7 +834,7 @@ with tab1:
     if st.button("Kirim Pesan Uji ke Telegram"):
         asyncio.run(send_telegram_message("🔍 *Pesan Uji*: Sistem deteksi merokok berfungsi dengan baik!"))
 
-    if all(v is not None for v in [mq2_value_latest, lux_value_latest, temperature_value_latest, humidity_value_latest, sound_value_latest]):
+    if all(v is not None for v in [mq2_value_latest, lux_value_latest, temperature_value_latest, humidity_value_latest, mic_value_latest]):
         st.markdown("---")
         st.subheader("💬 Chatbot AI (Gemini Flash)")
         
@@ -867,7 +867,7 @@ with tab1:
                         lux_value_latest,
                         temperature_value_latest,
                         humidity_value_latest,
-                        sound_value_latest
+                        mic_value_latest
                     )
                 }]
                 
@@ -887,7 +887,7 @@ with tab1:
     st.markdown("---")
     st.subheader("🔍 Prediksi Risiko Merokok")
     if st.button("Analisis Risiko Merokok"):
-        prediction = predict_smoking_risk_rule_based(mq2_value_latest, lux_value_latest, sound_value_latest)
+        prediction = predict_smoking_risk_rule_based(mq2_value_latest, lux_value_latest, mic_value_latest)
         st.write(prediction)
         if "Tinggi" in prediction:
             asyncio.run(send_telegram_message(f"🚨 *Peringatan Risiko*: {prediction}"))
