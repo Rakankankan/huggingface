@@ -5,6 +5,7 @@ scikit-learn
 streamlit-autorefresh
 opencv-python
 torch
-Pillow
+pillow
 numpy
-python-telegram-bot==20.3
+python-telegram-bot==20.0
+pytz
