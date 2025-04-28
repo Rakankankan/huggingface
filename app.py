@@ -121,10 +121,11 @@ async def send_telegram_message(message):
         bot = Bot(token=TELEGRAM_BOT_TOKEN)
         await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message, parse_mode="Markdown")
         logger.info("Pesan berhasil dikirim ke Telegram")
-        st.success("Pesan berhasil dikirim ke Telegram!")
+        return True
     except Exception as e:
         logger.error(f"Gagal mengirim pesan ke Telegram: {str(e)}")
         st.error(f"Gagal mengirim pesan ke Telegram: {str(e)}")
+        return False
 
 async def send_telegram_photo(photo, caption):
     try:
@@ -132,10 +133,11 @@ async def send_telegram_photo(photo, caption):
         bot = Bot(token=TELEGRAM_BOT_TOKEN)
         await bot.send_photo(chat_id=TELEGRAM_CHAT_ID, photo=photo, caption=caption, parse_mode="Markdown")
         logger.info("Foto berhasil dikirim ke Telegram")
-        st.success("Foto berhasil dikirim ke Telegram!")
+        return True
     except Exception as e:
         logger.error(f"Gagal mengirim foto ke Telegram: {str(e)}")
         st.error(f"Gagal mengirim foto ke Telegram: {str(e)}")
+        return False
 
 # --- DATA FETCH ---
 def get_ubidots_data(variable_label):
@@ -513,7 +515,7 @@ def load_yolo_model():
         st.error(f"Gagal memuat model YOLOv5: {str(e)}")
         return None
 
-def run_camera_detection(frame_placeholder, status_placeholder):
+async def run_camera_detection(frame_placeholder, status_placeholder):
     try:
         logger.info(f"Mencoba membuka stream kamera di {CAMERA_URL}")
         cap = cv2.VideoCapture(CAMERA_URL)
@@ -562,8 +564,7 @@ def run_camera_detection(frame_placeholder, status_placeholder):
                         f"🚨 *Peringatan*: Aktivitas merokok terdeteksi di ruangan!\n"
                         f"🕒 *Waktu*: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
                     )
-                    loop = asyncio.get_event_loop()
-                    loop.run_until_complete(send_telegram_photo(st.session_state.latest_frame, caption))
+                    await send_telegram_photo(st.session_state.latest_frame, caption)
                     last_smoking_notification = current_time
 
                     sensor_data = fetch_latest_sensor_data()
@@ -576,7 +577,7 @@ def run_camera_detection(frame_placeholder, status_placeholder):
                         statuses["humidity"], values.get("humidity", "N/A"),
                         statuses["mic"], values.get("mic", "N/A")
                     )
-                    loop.run_until_complete(send_telegram_photo(st.session_state.latest_frame, narrative))
+                    await send_telegram_photo(st.session_state.latest_frame, narrative)
 
                 if current_time - last_saved_time > save_interval:
                     filename = datetime.datetime.now().strftime("smoking_%Y%m%d_%H%M%S.jpg")
@@ -592,7 +593,7 @@ def run_camera_detection(frame_placeholder, status_placeholder):
             frame_placeholder.image(frame_pil, channels="RGB", use_container_width=True)
             st.session_state.last_frame = frame_pil
 
-            time.sleep(0.1)
+            await asyncio.sleep(0.1)
 
         cap.release()
     except Exception as e:
@@ -602,7 +603,7 @@ def run_camera_detection(frame_placeholder, status_placeholder):
         pass
 
 # --- PERIODIC NOTIFICATION FUNCTION ---
-def send_periodic_notification():
+async def send_periodic_notification():
     """
     Mengirim notifikasi periodik ke Telegram setiap 5 menit dengan data suhu, kelembapan, asap, intensitas cahaya, dan amplitudo.
     """
@@ -637,14 +638,25 @@ def send_periodic_notification():
     )
     
     if st.session_state.latest_frame is not None:
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(send_telegram_photo(st.session_state.latest_frame, caption))
+        await send_telegram_photo(st.session_state.latest_frame, caption)
     else:
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(send_telegram_message(caption + "\n⚠️ *Foto*: Kamera tidak aktif"))
+        await send_telegram_message(caption + "\n⚠️ *Foto*: Kamera tidak aktif")
     
     st.session_state.last_notification['last_sent'] = current_time
     logger.info("Notifikasi periodik dikirim")
+
+# --- SYNC WRAPPER FOR ASYNC FUNCTIONS ---
+def run_async(coro):
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(coro)
+        loop.close()
+        return result
+    except Exception as e:
+        logger.error(f"Error running async function: {str(e)}")
+        st.error(f"Error running async function: {str(e)}")
+        return False
 
 # --- UI START ---
 st.markdown('<div class="main-title">Sistem Deteksi Merokok Terintegrasi</div>', unsafe_allow_html=True)
@@ -736,11 +748,9 @@ with tab1:
                         f"🕒 *Waktu*: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
                     )
                     if st.session_state.latest_frame is not None:
-                        loop = asyncio.get_event_loop()
-                        loop.run_until_complete(send_telegram_photo(st.session_state.latest_frame, caption))
+                        run_async(send_telegram_photo(st.session_state.latest_frame, caption))
                     else:
-                        loop = asyncio.get_event_loop()
-                        loop.run_until_complete(send_telegram_message(caption + "\n⚠️ *Foto*: Kamera tidak aktif"))
+                        run_async(send_telegram_message(caption + "\n⚠️ *Foto*: Kamera tidak aktif"))
                     st.session_state.last_notification['mq2']['last_alert_sent'] = current_time
 
                     sensor_data = fetch_latest_sensor_data()
@@ -754,11 +764,9 @@ with tab1:
                         statuses["mic"], values.get("mic", "N/A")
                     )
                     if st.session_state.latest_frame is not None:
-                        loop = asyncio.get_event_loop()
-                        loop.run_until_complete(send_telegram_photo(st.session_state.latest_frame, narrative))
+                        run_async(send_telegram_photo(st.session_state.latest_frame, narrative))
                     else:
-                        loop = asyncio.get_event_loop()
-                        loop.run_until_complete(send_telegram_message(narrative + "\n⚠️ *Foto*: Kamera tidak aktif"))
+                        run_async(send_telegram_message(narrative + "\n⚠️ *Foto*: Kamera tidak aktif"))
 
                 st.session_state.last_notification['mq2']['status'] = status
                 st.session_state.last_notification['mq2']['value'] = value
@@ -831,12 +839,11 @@ with tab1:
             unsafe_allow_html=True
         )
 
-    send_periodic_notification()
+    run_async(send_periodic_notification())
 
     st.subheader("Uji Notifikasi Telegram")
     if st.button("Kirim Pesan Uji ke Telegram"):
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(send_telegram_message("🔍 *Pesan Uji*: Sistem deteksi merokok berfungsi dengan baik!"))
+        run_async(send_telegram_message("🔍 *Pesan Uji*: Sistem deteksi merokok berfungsi dengan baik!"))
 
     if all(v is not None for v in [mq2_value_latest, lux_value_latest, temperature_value_latest, humidity_value_latest, mic_value_latest]):
         st.markdown("---")
@@ -894,8 +901,7 @@ with tab1:
         prediction = predict_smoking_risk_rule_based(mq2_value_latest, lux_value_latest, mic_value_latest)
         st.write(prediction)
         if "Tinggi" in prediction:
-            loop = asyncio.get_event_loop()
-            loop.run_until_complete(send_telegram_message(f"🚨 *Peringatan Risiko*: {prediction}"))
+            run_async(send_telegram_message(f"🚨 *Peringatan Risiko*: {prediction}"))
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -919,7 +925,7 @@ with tab2:
         if 'model_cam' not in st.session_state or st.session_state.model_cam is None:
             st.session_state.model_cam = load_yolo_model()
         if auto_refresh_cam:
-            run_camera_detection(frame_placeholder, status_placeholder)
+            run_async(run_camera_detection(frame_placeholder, status_placeholder))
         elif st.session_state.last_frame is not None:
             frame_placeholder.image(st.session_state.last_frame, channels="RGB", use_container_width=True)
             status_placeholder.info("Auto-refresh kamera dimatikan. Menampilkan gambar terakhir.")
