@@ -28,7 +28,7 @@ os.environ['TORCH_HOME'] = '/tmp/torch_hub'
 # --- CONFIG ---
 UBIDOTS_TOKEN = "BBUS-4dkNId6LDOVysK48pdwW8cUGBfAQTK"
 DEVICE_LABEL = "hsc345"
-VARIABLES = ["mq2", "humidity", "temperature", "lux", "mic"]  # Ubah sound jadi mic
+VARIABLES = ["mq2", "humidity", "temperature", "lux", "mic"]
 TELEGRAM_BOT_TOKEN = "7941979379:AAEWGtlb87RYkvht8GzL8Ber29uosKo3e4s"
 TELEGRAM_CHAT_ID = "5721363432"
 NOTIFICATION_INTERVAL = 300  # 5 menit dalam detik
@@ -330,7 +330,7 @@ def generate_narrative_report(mq2_status, mq2_value, lux_status, lux_value, temp
     mic_templates = {
         "tinggi": [
             f"Amplitudo tinggi di {mic_value}. Mungkin ada aktivitas mencurigakan.",
-            f"D perroengan {mic_value}, ruangan menunjukkan aktivitas suara yang signifikan."
+            f"Dengan {mic_value}, ruangan menunjukkan aktivitas suara yang signifikan."
         ],
         "sedang": [
             f"Amplitudo sedang di {mic_value}. Aktivitas normal kemungkinan terjadi.",
@@ -500,17 +500,13 @@ def generate_chatbot_context(mq2_value, lux_value, temperature_value, humidity_v
 def load_yolo_model():
     try:
         logger.info("Mencoba memuat model YOLOv5...")
-        st.write("Mencoba memuat model YOLOv5...")
-        st.write(f"Current working directory: {os.getcwd()}")
-        st.write(f"Model file exists: {os.path.exists('model/best.pt')}")
+        device = torch.device('cpu')  # Force CPU to avoid CUDA issues
         if os.path.exists('model/best.pt'):
-            model = torch.hub.load('ultralytics/yolov5', 'custom', path='model/best.pt', force_reload=True)
+            model = torch.hub.load('ultralytics/yolov5', 'custom', path='model/best.pt', device=device, force_reload=True)
         else:
             logger.warning("File model/best.pt tidak ditemukan, menggunakan model yolov5s")
-            st.warning("File model/best.pt tidak ditemukan, menggunakan model yolov5s")
-            model = torch.hub.load('ultralytics/yolov5', 'yolov5s', force_reload=True)
+            model = torch.hub.load('ultralytics/yolov5', 'yolov5s', device=device, force_reload=True)
         logger.info("Model YOLOv5 berhasil dimuat")
-        st.write("Model YOLOv5 berhasil dimuat")
         return model
     except Exception as e:
         logger.error(f"Gagal memuat model YOLOv5: {str(e)}")
@@ -566,7 +562,8 @@ def run_camera_detection(frame_placeholder, status_placeholder):
                         f"🚨 *Peringatan*: Aktivitas merokok terdeteksi di ruangan!\n"
                         f"🕒 *Waktu*: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
                     )
-                    asyncio.run(send_telegram_photo(st.session_state.latest_frame, caption))
+                    loop = asyncio.get_event_loop()
+                    loop.run_until_complete(send_telegram_photo(st.session_state.latest_frame, caption))
                     last_smoking_notification = current_time
 
                     sensor_data = fetch_latest_sensor_data()
@@ -579,7 +576,7 @@ def run_camera_detection(frame_placeholder, status_placeholder):
                         statuses["humidity"], values.get("humidity", "N/A"),
                         statuses["mic"], values.get("mic", "N/A")
                     )
-                    asyncio.run(send_telegram_photo(st.session_state.latest_frame, narrative))
+                    loop.run_until_complete(send_telegram_photo(st.session_state.latest_frame, narrative))
 
                 if current_time - last_saved_time > save_interval:
                     filename = datetime.datetime.now().strftime("smoking_%Y%m%d_%H%M%S.jpg")
@@ -640,9 +637,11 @@ def send_periodic_notification():
     )
     
     if st.session_state.latest_frame is not None:
-        asyncio.run(send_telegram_photo(st.session_state.latest_frame, caption))
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(send_telegram_photo(st.session_state.latest_frame, caption))
     else:
-        asyncio.run(send_telegram_message(caption + "\n⚠️ *Foto*: Kamera tidak aktif"))
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(send_telegram_message(caption + "\n⚠️ *Foto*: Kamera tidak aktif"))
     
     st.session_state.last_notification['last_sent'] = current_time
     logger.info("Notifikasi periodik dikirim")
@@ -720,7 +719,7 @@ with tab1:
 
             st.markdown(
                 f'<div class="data-box"><span class="label">{emoji} {var_label}</span><span class="data-value">{value}</span></div>',
-                unsafe_ALLOW_html=True
+                unsafe_allow_html=True
             )
 
             st.line_chart(df[['timestamp', 'value']].set_index('timestamp'))
@@ -737,9 +736,11 @@ with tab1:
                         f"🕒 *Waktu*: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
                     )
                     if st.session_state.latest_frame is not None:
-                        asyncio.run(send_telegram_photo(st.session_state.latest_frame, caption))
+                        loop = asyncio.get_event_loop()
+                        loop.run_until_complete(send_telegram_photo(st.session_state.latest_frame, caption))
                     else:
-                        asyncio.run(send_telegram_message(caption + "\n⚠️ *Foto*: Kamera tidak aktif"))
+                        loop = asyncio.get_event_loop()
+                        loop.run_until_complete(send_telegram_message(caption + "\n⚠️ *Foto*: Kamera tidak aktif"))
                     st.session_state.last_notification['mq2']['last_alert_sent'] = current_time
 
                     sensor_data = fetch_latest_sensor_data()
@@ -753,9 +754,11 @@ with tab1:
                         statuses["mic"], values.get("mic", "N/A")
                     )
                     if st.session_state.latest_frame is not None:
-                        asyncio.run(send_telegram_photo(st.session_state.latest_frame, narrative))
+                        loop = asyncio.get_event_loop()
+                        loop.run_until_complete(send_telegram_photo(st.session_state.latest_frame, narrative))
                     else:
-                        asyncio.run(send_telegram_message(narrative + "\n⚠️ *Foto*: Kamera tidak aktif"))
+                        loop = asyncio.get_event_loop()
+                        loop.run_until_complete(send_telegram_message(narrative + "\n⚠️ *Foto*: Kamera tidak aktif"))
 
                 st.session_state.last_notification['mq2']['status'] = status
                 st.session_state.last_notification['mq2']['value'] = value
@@ -832,7 +835,8 @@ with tab1:
 
     st.subheader("Uji Notifikasi Telegram")
     if st.button("Kirim Pesan Uji ke Telegram"):
-        asyncio.run(send_telegram_message("🔍 *Pesan Uji*: Sistem deteksi merokok berfungsi dengan baik!"))
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(send_telegram_message("🔍 *Pesan Uji*: Sistem deteksi merokok berfungsi dengan baik!"))
 
     if all(v is not None for v in [mq2_value_latest, lux_value_latest, temperature_value_latest, humidity_value_latest, mic_value_latest]):
         st.markdown("---")
@@ -890,7 +894,8 @@ with tab1:
         prediction = predict_smoking_risk_rule_based(mq2_value_latest, lux_value_latest, mic_value_latest)
         st.write(prediction)
         if "Tinggi" in prediction:
-            asyncio.run(send_telegram_message(f"🚨 *Peringatan Risiko*: {prediction}"))
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(send_telegram_message(f"🚨 *Peringatan Risiko*: {prediction}"))
 
     st.markdown('</div>', unsafe_allow_html=True)
 
