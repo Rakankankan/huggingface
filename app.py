@@ -9,6 +9,7 @@ import cv2
 import torch
 import time
 import datetime
+import pytz
 from PIL import Image
 import numpy as np
 import io
@@ -24,6 +25,9 @@ logger = logging.getLogger(__name__)
 
 # Atur cache PyTorch untuk lingkungan deployment
 os.environ['TORCH_HOME'] = '/tmp/torch_hub'
+
+# Zona waktu WIB (UTC+7)
+WIB = pytz.timezone('Asia/Jakarta')
 
 # --- CONFIG ---
 UBIDOTS_TOKEN = "BBUS-4dkNId6LDOVysK48pdwW8cUGBfAQTK"
@@ -149,6 +153,7 @@ def get_ubidots_data(variable_label):
     try:
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
+            logger.info(f"Berhasil mengambil data Ubidots untuk {variable_label}")
             return response.json().get("results", [])
         else:
             logger.error(f"Gagal mengambil data dari Ubidots untuk {variable_label}: {response.status_code}")
@@ -363,7 +368,7 @@ def generate_narrative_report(mq2_status, mq2_value, lux_status, lux_value, temp
         f"- 🌡️ {temp}\n"
         f"- 💧 {humidity}\n"
         f"- 🎙️ {mic}\n"
-        f"🕒 *Waktu*: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        f"🕒 *Waktu (WIB)*: {datetime.datetime.now(WIB).strftime('%Y-%m-%d %H:%M:%S')}"
     )
     return narrative
 
@@ -415,7 +420,8 @@ def predict_smoking_risk_rule_based(mq2_value, lux_value, mic_value):
         f"🔍 *Prediksi Risiko Merokok*\n"
         f"Tingkat Risiko: **{risk_level}** (Skor: {risk_score})\n"
         f"Rincian:\n- {risk_messages[0]}\n- {risk_messages[1]}\n- {risk_messages[2]}\n"
-        f"Rekomendasi: {recommendation}"
+        f"Rekomendasi: {recommendation}\n"
+        f"🕒 *Waktu (WIB)*: {datetime.datetime.now(WIB).strftime('%Y-%m-%d %H:%M:%S')}"
     )
     return report
 
@@ -493,6 +499,7 @@ def generate_chatbot_context(mq2_value, lux_value, temperature_value, humidity_v
         f"- Sensor Suhu: {temperature_value}°C ({temp_status})\n"
         f"- Sensor Kelembapan: {humidity_value}% ({humidity_status})\n"
         f"- Sensor Amplitudo: {mic_value} ({mic_status})\n\n"
+        f"Waktu saat ini (WIB): {datetime.datetime.now(WIB).strftime('%Y-%m-%d %H:%M:%S')}\n"
         "Anda bisa menjawab pertanyaan tentang kondisi ruangan, deteksi asap rokok, "
         "atau memberikan saran berdasarkan data sensor. Gunakan bahasa yang jelas dan informatif."
     )
@@ -562,7 +569,7 @@ async def run_camera_detection(frame_placeholder, status_placeholder):
                 if current_time - last_smoking_notification > ALERT_COOLDOWN:
                     caption = (
                         f"🚨 *Peringatan*: Aktivitas merokok terdeteksi di ruangan!\n"
-                        f"🕒 *Waktu*: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                        f"🕒 *Waktu (WIB)*: {datetime.datetime.now(WIB).strftime('%Y-%m-%d %H:%M:%S')}"
                     )
                     await send_telegram_photo(st.session_state.latest_frame, caption)
                     last_smoking_notification = current_time
@@ -580,7 +587,7 @@ async def run_camera_detection(frame_placeholder, status_placeholder):
                     await send_telegram_photo(st.session_state.latest_frame, narrative)
 
                 if current_time - last_saved_time > save_interval:
-                    filename = datetime.datetime.now().strftime("smoking_%Y%m%d_%H%M%S.jpg")
+                    filename = datetime.datetime.now(WIB).strftime("smoking_%Y%m%d_%H%M%S.jpg")
                     cv2.imwrite(filename, frame)
                     last_saved_time = current_time
                     logger.info(f"Gambar disimpan: {filename}")
@@ -609,6 +616,7 @@ async def send_periodic_notification():
     """
     current_time = time.time()
     if current_time - st.session_state.last_notification['last_sent'] < NOTIFICATION_INTERVAL:
+        logger.debug("Notifikasi periodik belum waktunya")
         return
     
     logger.info("Mengirim notifikasi periodik...")
@@ -617,19 +625,15 @@ async def send_periodic_notification():
     values = sensor_data["values"]
     statuses = sensor_data["statuses"]
     
-    st.session_state.last_notification['mq2']['status'] = statuses["mq2"]
-    st.session_state.last_notification['mq2']['value'] = values.get("mq2")
-    st.session_state.last_notification['lux']['status'] = statuses["lux"]
-    st.session_state.last_notification['lux']['value'] = values.get("lux")
-    st.session_state.last_notification['temperature']['status'] = statuses["temperature"]
-    st.session_state.last_notification['temperature']['value'] = values.get("temperature")
-    st.session_state.last_notification['humidity']['status'] = statuses["humidity"]
-    st.session_state.last_notification['humidity']['value'] = values.get("humidity")
-    st.session_state.last_notification['mic']['status'] = statuses["mic"]
-    st.session_state.last_notification['mic']['value'] = values.get("mic")
+    # Simpan data terbaru ke session state
+    st.session_state.sensor_data = {
+        'values': values,
+        'statuses': statuses,
+        'last_updated': current_time
+    }
     
     caption = (
-        f"📊 *Laporan Status Ruangan* ({datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')})\n"
+        f"📊 *Laporan Status Ruangan* ({datetime.datetime.now(WIB).strftime('%Y-%m-%d %H:%M:%S')})\n"
         f"💨 *Asap*: {statuses['mq2']} (Nilai: {values.get('mq2', 'N/A')})\n"
         f"💡 *Cahaya*: {statuses['lux']} (Nilai: {values.get('lux', 'N/A')} lux)\n"
         f"🌡️ *Suhu*: {statuses['temperature']} (Nilai: {values.get('temperature', 'N/A')}°C)\n"
@@ -668,12 +672,6 @@ with tab1:
     st.markdown('<div class="tab-content">', unsafe_allow_html=True)
     st.header("Live Stream Data + AI Deteksi Rokok & Cahaya")
 
-    mq2_value_latest = None
-    lux_value_latest = None
-    temperature_value_latest = None
-    humidity_value_latest = None
-    mic_value_latest = None
-
     auto_refresh_iot = st.checkbox("Aktifkan Auto-Refresh Data IoT", value=True, key="iot_refresh")
     if auto_refresh_iot:
         st_autorefresh(interval=5000, key="iot_auto_refresh")
@@ -694,6 +692,13 @@ with tab1:
     if 'last_frame' not in st.session_state:
         st.session_state.last_frame = None
 
+    if 'sensor_data' not in st.session_state:
+        st.session_state.sensor_data = {
+            'values': {var: None for var in VARIABLES},
+            'statuses': {var: f"Data {var} tidak tersedia" for var in VARIABLES},
+            'last_updated': 0
+        }
+
     # Initialize chat history if not exists
     if "chat_messages" not in st.session_state:
         st.session_state.chat_messages = [{
@@ -701,36 +706,47 @@ with tab1:
             "content": "Anda adalah asisten AI untuk sistem deteksi merokok. Anda bisa menjawab pertanyaan tentang kondisi ruangan, deteksi asap rokok, atau memberikan saran berdasarkan data sensor."
         }]
 
+    # Perbarui data sensor setiap kali halaman di-refresh
+    sensor_data = fetch_latest_sensor_data()
+    st.session_state.sensor_data = {
+        'values': sensor_data['values'],
+        'statuses': sensor_data['statuses'],
+        'last_updated': time.time()
+    }
+
+    mq2_value_latest = st.session_state.sensor_data['values'].get('mq2')
+    lux_value_latest = st.session_state.sensor_data['values'].get('lux')
+    temperature_value_latest = st.session_state.sensor_data['values'].get('temperature')
+    humidity_value_latest = st.session_state.sensor_data['values'].get('humidity')
+    mic_value_latest = st.session_state.sensor_data['values'].get('mic')
+
     for var_name in VARIABLES:
+        value = st.session_state.sensor_data['values'].get(var_name)
+        status = st.session_state.sensor_data['statuses'].get(var_name)
         data = get_ubidots_data(var_name)
+        
         if data:
             df = pd.DataFrame(data)
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-            value = round(df.iloc[0]['value'], 2)
-
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms').dt.tz_localize('UTC').dt.tz_convert(WIB)
+            
             if var_name == "mq2":
                 var_label = "ASAP/GAS"
                 emoji = "💨"
-                mq2_value_latest = value
             elif var_name == "humidity":
                 var_label = "KELEMBAPAN"
                 emoji = "💧"
-                humidity_value_latest = value
             elif var_name == "temperature":
                 var_label = "SUHU"
                 emoji = "🌡️"
-                temperature_value_latest = value
             elif var_name == "lux":
                 var_label = "INTENSITAS CAHAYA"
                 emoji = "💡"
-                lux_value_latest = value
             elif var_name == "mic":
                 var_label = "AMPLITUDO"
                 emoji = "🎙️"
-                mic_value_latest = value
 
             st.markdown(
-                f'<div class="data-box"><span class="label">{emoji} {var_label}</span><span class="data-value">{value}</span></div>',
+                f'<div class="data-box"><span class="label">{emoji} {var_label}</span><span class="data-value">{value if value is not None else "N/A"}</span></div>',
                 unsafe_allow_html=True
             )
 
@@ -739,13 +755,14 @@ with tab1:
             current_time = time.time()
 
             if var_name == "mq2":
-                status = predict_smoke_status(value)
+                st.session_state.last_notification['mq2']['status'] = status
+                st.session_state.last_notification['mq2']['value'] = value
                 if "Bahaya" in status and \
                    current_time - st.session_state.last_notification['mq2']['last_alert_sent'] > ALERT_COOLDOWN:
                     caption = (
                         f"🚨 *Peringatan Asap*: {status}\n"
                         f"📊 *Nilai MQ2*: {value}\n"
-                        f"🕒 *Waktu*: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                        f"🕒 *Waktu (WIB)*: {datetime.datetime.now(WIB).strftime('%Y-%m-%d %H:%M:%S')}"
                     )
                     if st.session_state.latest_frame is not None:
                         run_async(send_telegram_photo(st.session_state.latest_frame, caption))
@@ -753,23 +770,22 @@ with tab1:
                         run_async(send_telegram_message(caption + "\n⚠️ *Foto*: Kamera tidak aktif"))
                     st.session_state.last_notification['mq2']['last_alert_sent'] = current_time
 
-                    sensor_data = fetch_latest_sensor_data()
-                    values = sensor_data["values"]
-                    statuses = sensor_data["statuses"]
                     narrative = generate_narrative_report(
-                        statuses["mq2"], values.get("mq2", "N/A"),
-                        statuses["lux"], values.get("lux", "N/A"),
-                        statuses["temperature"], values.get("temperature", "N/A"),
-                        statuses["humidity"], values.get("humidity", "N/A"),
-                        statuses["mic"], values.get("mic", "N/A")
+                        status, value,
+                        st.session_state.sensor_data['statuses'].get('lux', "N/A"),
+                        st.session_state.sensor_data['values'].get('lux', "N/A"),
+                        st.session_state.sensor_data['statuses'].get('temperature', "N/A"),
+                        st.session_state.sensor_data['values'].get('temperature', "N/A"),
+                        st.session_state.sensor_data['statuses'].get('humidity', "N/A"),
+                        st.session_state.sensor_data['values'].get('humidity', "N/A"),
+                        st.session_state.sensor_data['statuses'].get('mic', "N/A"),
+                        st.session_state.sensor_data['values'].get('mic', "N/A")
                     )
                     if st.session_state.latest_frame is not None:
                         run_async(send_telegram_photo(st.session_state.latest_frame, narrative))
                     else:
                         run_async(send_telegram_message(narrative + "\n⚠️ *Foto*: Kamera tidak aktif"))
 
-                st.session_state.last_notification['mq2']['status'] = status
-                st.session_state.last_notification['mq2']['value'] = value
                 if "Bahaya" in status:
                     st.error(status)
                 elif "Mencurigakan" in status:
@@ -778,41 +794,37 @@ with tab1:
                     st.success(status)
 
             if var_name == "lux":
-                lux_status = evaluate_lux_condition(value, mq2_value_latest)
-                st.session_state.last_notification['lux']['status'] = lux_status
+                st.session_state.last_notification['lux']['status'] = status
                 st.session_state.last_notification['lux']['value'] = value
-                if "mencurigakan" in lux_status.lower():
-                    st.warning(lux_status)
+                if "mencurigakan" in status.lower():
+                    st.warning(status)
                 else:
-                    st.info(lux_status)
+                    st.info(status)
 
             if var_name == "temperature":
-                temp_status = evaluate_temperature_condition(value)
-                st.session_state.last_notification['temperature']['status'] = temp_status
+                st.session_state.last_notification['temperature']['status'] = status
                 st.session_state.last_notification['temperature']['value'] = value
-                if "panas" in temp_status.lower() or "berbahaya" in temp_status.lower():
-                    st.warning(temp_status)
-                elif "dingin" in temp_status.lower():
-                    st.info(temp_status)
+                if "panas" in status.lower() or "berbahaya" in status.lower():
+                    st.warning(status)
+                elif "dingin" in status.lower():
+                    st.info(status)
                 else:
-                    st.success(temp_status)
+                    st.success(status)
 
             if var_name == "humidity":
-                humidity_status = f"Kelembapan {value}%: {'tinggi' if value > 70 else 'normal' if value >= 30 else 'rendah'}"
-                st.session_state.last_notification['humidity']['status'] = humidity_status
+                st.session_state.last_notification['humidity']['status'] = status
                 st.session_state.last_notification['humidity']['value'] = value
-                st.info(humidity_status)
+                st.info(status)
 
             if var_name == "mic":
-                mic_status = evaluate_mic_condition(value)
-                st.session_state.last_notification['mic']['status'] = mic_status
+                st.session_state.last_notification['mic']['status'] = status
                 st.session_state.last_notification['mic']['value'] = value
-                if "tinggi" in mic_status.lower():
-                    st.warning(mic_status)
-                elif "sedang" in mic_status.lower():
-                    st.info(mic_status)
+                if "tinggi" in status.lower():
+                    st.warning(status)
+                elif "sedang" in status.lower():
+                    st.info(status)
                 else:
-                    st.success(mic_status)
+                    st.success(status)
 
         else:
             st.error(f"Gagal mengambil data dari variabel: {var_name}")
@@ -834,16 +846,18 @@ with tab1:
                     <li>Kelembapan: {summary['details']['Kelembapan']}</li>
                     <li>Amplitudo: {summary['details']['Amplitudo']}</li>
                 </ul>
+                <p><strong>Terakhir Diperbarui (WIB):</strong> {datetime.datetime.fromtimestamp(st.session_state.sensor_data['last_updated']).astimezone(WIB).strftime('%Y-%m-%d %H:%M:%S')}</p>
             </div>
             """,
             unsafe_allow_html=True
         )
 
+    # Panggil notifikasi periodik
     run_async(send_periodic_notification())
 
     st.subheader("Uji Notifikasi Telegram")
     if st.button("Kirim Pesan Uji ke Telegram"):
-        run_async(send_telegram_message("🔍 *Pesan Uji*: Sistem deteksi merokok berfungsi dengan baik!"))
+        run_async(send_telegram_message(f"🔍 *Pesan Uji*: Sistem deteksi merokok berfungsi dengan baik!\n🕒 *Waktu (WIB)*: {datetime.datetime.now(WIB).strftime('%Y-%m-%d %H:%M:%S')}"))
 
     if all(v is not None for v in [mq2_value_latest, lux_value_latest, temperature_value_latest, humidity_value_latest, mic_value_latest]):
         st.markdown("---")
@@ -861,7 +875,7 @@ with tab1:
                     else:
                         st.markdown(f'<div class="assistant-message">🤖 {message["content"]}</div>', unsafe_allow_html=True)
             else:
-                st.markdown('<div class="assistant-message">🤖 Tulis pertanyaan Anda untuk memulai!</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="assistant-message">🤖 Tulis pertanyaan Anda untuk memulai!</div>', unsafe_allow_html=True)
             
             st.markdown('</div>', unsafe_allow_html=True)
             
